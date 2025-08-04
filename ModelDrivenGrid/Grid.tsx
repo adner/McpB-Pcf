@@ -149,27 +149,36 @@ export const Grid = React.memo((props: GridProps) => {
 
 	// Sync React Selection with PCF selection when selectedRecordIds changes
 	React.useEffect(() => {
-		if (items && selectedRecordIds) {
+		if (items && selectedRecordIds && selectedRecordIds.length > 0) {
 			const selectedIndices: number[] = [];
 			
-			// Filter out undefined items for selection
-			const validItems = items.filter((item): item is DataSet => item !== undefined);
-			
 			selectedRecordIds.forEach(selectedId => {
-				const index = validItems.findIndex(item => item.getRecordId() === selectedId);
+				const index = items.findIndex(item => item?.getRecordId() === selectedId);
 				if (index !== -1) {
 					selectedIndices.push(index);
 				}
 			});
 			
-			// Update the selection without triggering the onSelectionChanged callback
-			selection.setItems(validItems, false);
-			selection.setIndexSelected(0, false, true); // Clear all selections first
-			selectedIndices.forEach(index => {
-				selection.setIndexSelected(index, true, false);
-			});
+			// Only update if we have valid selections and they're different from current
+			if (selectedIndices.length > 0) {
+				const currentSelection = selection.getSelectedIndices();
+				const selectionChanged = selectedIndices.length !== currentSelection.length || 
+					!selectedIndices.every(index => currentSelection.includes(index));
+				
+				if (selectionChanged) {
+					// Clear all selections first
+					selection.setAllSelected(false);
+					// Set new selections without triggering callbacks
+					selectedIndices.forEach(index => {
+						selection.setIndexSelected(index, true, false);
+					});
+				}
+			}
+		} else if (selectedRecordIds && selectedRecordIds.length === 0) {
+			// Clear selection if no records are selected
+			selection.setAllSelected(false);
 		}
-	}, [items, selectedRecordIds, selection]);
+	}, [items, selectedRecordIds]);
 
 	const getContextualMenuProps = React.useCallback(
 		(column: IColumn, ev: React.MouseEvent<HTMLElement>): IContextualMenuProps => {

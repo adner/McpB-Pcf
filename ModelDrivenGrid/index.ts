@@ -102,7 +102,45 @@ export class ModelDrivenGrid implements ComponentFramework.StandardControl<IInpu
 			};
 		});
 
-		server.tool("getGridData", "Get current grid data and state", {}, async () => {
+		server.tool("getGridData", "Get current grid data and state including selected record values", {}, async () => {
+			const selectedRecordIds = this.context.parameters.records.getSelectedRecordIds();
+			const visibleColumns = this.context.parameters.records.columns.filter(col => !col.isHidden);
+			
+			// Get actual data for selected records
+			const selectedRecordsData = selectedRecordIds.map(recordId => {
+				const record = this.records[recordId];
+				if (record) {
+					const recordData: any = {
+						recordId: recordId,
+						entityName: record.getNamedReference().name,
+						values: {}
+					};
+					
+					// Get formatted values for all visible columns
+					visibleColumns.forEach(column => {
+						try {
+							recordData.values[column.name] = {
+								displayName: column.displayName,
+								formattedValue: record.getFormattedValue(column.name),
+								rawValue: record.getValue(column.name),
+								dataType: column.dataType
+							};
+						} catch {
+							// Skip columns that can't be read
+							recordData.values[column.name] = {
+								displayName: column.displayName,
+								formattedValue: "N/A",
+								rawValue: null,
+								dataType: column.dataType
+							};
+						}
+					});
+					
+					return recordData;
+				}
+				return null;
+			}).filter(record => record !== null);
+			
 			return {
 				content: [
 					{
@@ -110,11 +148,12 @@ export class ModelDrivenGrid implements ComponentFramework.StandardControl<IInpu
 						text: JSON.stringify({
 							totalRecords: this.context.parameters.records.paging.totalResultCount,
 							currentPage: this.currentPage,
-							selectedRecords: this.context.parameters.records.getSelectedRecordIds(),
+							selectedRecordIds: selectedRecordIds,
+							selectedRecordsCount: selectedRecordIds.length,
 							hasNextPage: this.context.parameters.records.paging.hasNextPage,
 							hasPreviousPage: this.context.parameters.records.paging.hasPreviousPage,
 							isLoading: this.context.parameters.records.loading,
-							columns: this.context.parameters.records.columns.map(col => ({
+							columns: visibleColumns.map(col => ({
 								name: col.name,
 								displayName: col.displayName,
 								dataType: col.dataType,
@@ -122,8 +161,9 @@ export class ModelDrivenGrid implements ComponentFramework.StandardControl<IInpu
 								isHidden: col.isHidden
 							})),
 							sorting: this.context.parameters.records.sorting,
-							filtering: this.context.parameters.records.filtering?.getFilter()
-						})
+							filtering: this.context.parameters.records.filtering?.getFilter(),
+							selectedRecordsData: selectedRecordsData
+						}, null, 2)
 					}
 				]
 			};
@@ -131,14 +171,14 @@ export class ModelDrivenGrid implements ComponentFramework.StandardControl<IInpu
 
 		server.tool("sortGrid", "Sorts the grid on a column", {
 			columnName: z.string().describe("The logical name of the column that we should sort on"),
-			direction: z.string().describe("The sorting direction - 'true' if descending, 'false' if ascending")
-		}, async ({ columnName, direction }) => {
-			this.onSort(columnName, direction === "true");
+			descending: z.boolean().optional().describe("Whether to sort in descending order (default: false)")
+		}, async ({ columnName, descending = false }) => {
+			this.onSort(columnName, descending);
 			return {
 				content: [
 					{
 						type: "text",
-						text: `Grid sorted by ${columnName} in ${direction === "true" ? "descending" : "ascending"} order.`,
+						text: `Grid sorted by ${columnName} in ${descending ? "descending" : "ascending"} order.`,
 					},
 				],
 			};
