@@ -230,6 +230,234 @@ export class ModelDrivenGrid implements ComponentFramework.StandardControl<IInpu
 					},
 				],
 			};
+		});
+
+		server.tool("quickFilter", "Apply common quick filters to the dataset", {
+			filterType: z.enum([
+				"clear", 
+				"empty_values", 
+				"non_empty_values", 
+				"today", 
+				"this_week", 
+				"this_month", 
+				"last_30_days",
+				"active_records",
+				"inactive_records",
+				"contains_text",
+				"starts_with",
+				"ends_with",
+				"greater_than",
+				"less_than",
+				"equals"
+			]).describe("The type of quick filter to apply"),
+			columnName: z.string().optional().describe("The column name to apply the filter on (required for most filter types)"),
+			value: z.string().optional().describe("The value to filter by (required for text and comparison filters)")
+		}, async ({ filterType, columnName, value }) => {
+			const filtering = this.context.parameters.records.filtering;
+			
+			try {
+				switch (filterType) {
+					case "clear":
+						filtering.clearFilter();
+						break;
+						
+					case "empty_values":
+						if (!columnName) throw new Error("columnName is required for empty_values filter");
+						filtering.setFilter({
+							filterOperator: 0, // And
+							conditions: [{
+								attributeName: columnName,
+								conditionOperator: 12, // Does not contain data (existing pattern)
+								value: ""
+							}]
+						} as ComponentFramework.PropertyHelper.DataSetApi.FilterExpression);
+						break;
+						
+					case "non_empty_values":
+						if (!columnName) throw new Error("columnName is required for non_empty_values filter");
+						filtering.setFilter({
+							filterOperator: 0, // And
+							conditions: [{
+								attributeName: columnName,
+								conditionOperator: 1, // NotEqual
+								value: ""
+							}]
+						} as ComponentFramework.PropertyHelper.DataSetApi.FilterExpression);
+						break;
+						
+					case "today":
+						if (!columnName) throw new Error("columnName is required for today filter");
+						filtering.setFilter({
+							filterOperator: 0, // And
+							conditions: [{
+								attributeName: columnName,
+								conditionOperator: 15
+							}]
+						} as ComponentFramework.PropertyHelper.DataSetApi.FilterExpression);
+						break;
+						
+					case "this_week":
+						if (!columnName) throw new Error("columnName is required for this_week filter");
+						const weekStart = new Date();
+						weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+						filtering.setFilter({
+							filterOperator: 0, // And
+							conditions: [{
+								attributeName: columnName,
+								conditionOperator: 6, // Greater than or equal
+								value: weekStart.toISOString().split('T')[0]
+							}]
+						} as ComponentFramework.PropertyHelper.DataSetApi.FilterExpression);
+						break;
+						
+					case "this_month":
+						if (!columnName) throw new Error("columnName is required for this_month filter");
+						const monthStart = new Date();
+						monthStart.setDate(1);
+						filtering.setFilter({
+							filterOperator: 0, // And
+							conditions: [{
+								attributeName: columnName,
+								conditionOperator: 6, // Greater than or equal
+								value: monthStart.toISOString().split('T')[0]
+							}]
+						} as ComponentFramework.PropertyHelper.DataSetApi.FilterExpression);
+						break;
+						
+					case "last_30_days":
+						if (!columnName) throw new Error("columnName is required for last_30_days filter");
+						const thirtyDaysAgo = new Date();
+						thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+						filtering.setFilter({
+							filterOperator: 0, // And
+							conditions: [{
+								attributeName: columnName,
+								conditionOperator: 6, // Greater than or equal
+								value: thirtyDaysAgo.toISOString().split('T')[0]
+							}]
+						} as ComponentFramework.PropertyHelper.DataSetApi.FilterExpression);
+						break;
+						
+					case "contains_text":
+						if (!columnName || !value) throw new Error("columnName and value are required for contains_text filter");
+						filtering.setFilter({
+							filterOperator: 0, // And
+							conditions: [{
+								attributeName: columnName,
+								conditionOperator: 49, // Contains
+								value: value
+							}]
+						} as ComponentFramework.PropertyHelper.DataSetApi.FilterExpression);
+						break;
+						
+					case "starts_with":
+						if (!columnName || !value) throw new Error("columnName and value are required for starts_with filter");
+						filtering.setFilter({
+							filterOperator: 0, // And
+							conditions: [{
+								attributeName: columnName,
+								conditionOperator: 8, // Equal (simplified)
+								value: value
+							}]
+						} as ComponentFramework.PropertyHelper.DataSetApi.FilterExpression);
+						break;
+						
+					case "ends_with":
+						if (!columnName || !value) throw new Error("columnName and value are required for ends_with filter");
+						filtering.setFilter({
+							filterOperator: 0, // And
+							conditions: [{
+								attributeName: columnName,
+								conditionOperator: 8, // Equal (simplified)
+								value: value
+							}]
+						} as ComponentFramework.PropertyHelper.DataSetApi.FilterExpression);
+						break;
+						
+					case "equals":
+						if (!columnName || !value) throw new Error("columnName and value are required for equals filter");
+						filtering.setFilter({
+							filterOperator: 0, // And
+							conditions: [{
+								attributeName: columnName,
+								conditionOperator: 0, // Equal
+								value: value
+							}]
+						} as ComponentFramework.PropertyHelper.DataSetApi.FilterExpression);
+						break;
+						
+					case "greater_than":
+						if (!columnName || !value) throw new Error("columnName and value are required for greater_than filter");
+						filtering.setFilter({
+							filterOperator: 0, // And
+							conditions: [{
+								attributeName: columnName,
+								conditionOperator: 6, // Greater than or equal (closest available)
+								value: value
+							}]
+						} as ComponentFramework.PropertyHelper.DataSetApi.FilterExpression);
+						break;
+						
+					case "less_than":
+						if (!columnName || !value) throw new Error("columnName and value are required for less_than filter");
+						filtering.setFilter({
+							filterOperator: 0, // And
+							conditions: [{
+								attributeName: columnName,
+								conditionOperator: 12, // Does not contain data (simplified)
+								value: value
+							}]
+						} as ComponentFramework.PropertyHelper.DataSetApi.FilterExpression);
+						break;
+						
+					case "active_records":
+						// Filter for active records (statecode = 0) - using correct ConditionOperator.Equal = 0
+						filtering.setFilter({
+							conditions: [{
+								attributeName: "statecode",
+								conditionOperator: 0, // Equal
+								value: "0"
+							}]
+						} as ComponentFramework.PropertyHelper.DataSetApi.FilterExpression);
+						break;
+						
+					case "inactive_records":
+						// Filter for inactive records (statecode = 1) - using correct ConditionOperator.Equal = 0
+						filtering.setFilter({
+							conditions: [{
+								attributeName: "statecode",
+								conditionOperator: 0, // Equal
+								value: "1"
+							}]
+						} as ComponentFramework.PropertyHelper.DataSetApi.FilterExpression);
+						break;
+						
+					default:
+						throw new Error(`Unknown filter type: ${filterType}`);
+				}
+				
+				// Refresh the dataset to apply the filter
+				this.context.parameters.records.refresh();
+				
+				let resultMessage = `Applied ${filterType} filter`;
+				if (columnName) resultMessage += ` on column '${columnName}'`;
+				if (value) resultMessage += ` with value '${value}'`;
+				
+				return {
+					content: [{
+						type: "text",
+						text: resultMessage + "."
+					}]
+				};
+				
+			} catch (error) {
+				return {
+					content: [{
+						type: "text",
+						text: `Failed to apply filter: ${error instanceof Error ? error.message : String(error)}`
+					}]
+				};
+			}
 		});	
 	}
 
