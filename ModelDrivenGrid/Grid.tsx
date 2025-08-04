@@ -37,6 +37,7 @@ export interface GridProps {
 	columns: ComponentFramework.PropertyHelper.DataSetApi.Column[];
 	records: Record<string, ComponentFramework.PropertyHelper.DataSetApi.EntityRecord>;
 	sortedRecordIds: string[];
+	selectedRecordIds: string[];
 	hasNextPage: boolean;
 	hasPreviousPage: boolean;
 	totalResultCount: number;
@@ -85,6 +86,7 @@ export const Grid = React.memo((props: GridProps) => {
 	const {
 		records,
 		sortedRecordIds,
+		selectedRecordIds,
 		columns,
 		width,
 		height,
@@ -144,6 +146,30 @@ export const Grid = React.memo((props: GridProps) => {
 
 		return sortedRecords;
 	}, [records, sortedRecordIds, hasNextPage, setIsLoading]);
+
+	// Sync React Selection with PCF selection when selectedRecordIds changes
+	React.useEffect(() => {
+		if (items && selectedRecordIds) {
+			const selectedIndices: number[] = [];
+			
+			// Filter out undefined items for selection
+			const validItems = items.filter((item): item is DataSet => item !== undefined);
+			
+			selectedRecordIds.forEach(selectedId => {
+				const index = validItems.findIndex(item => item.getRecordId() === selectedId);
+				if (index !== -1) {
+					selectedIndices.push(index);
+				}
+			});
+			
+			// Update the selection without triggering the onSelectionChanged callback
+			selection.setItems(validItems, false);
+			selection.setIndexSelected(0, false, true); // Clear all selections first
+			selectedIndices.forEach(index => {
+				selection.setIndexSelected(index, true, false);
+			});
+		}
+	}, [items, selectedRecordIds, selection]);
 
 	const getContextualMenuProps = React.useCallback(
 		(column: IColumn, ev: React.MouseEvent<HTMLElement>): IContextualMenuProps => {

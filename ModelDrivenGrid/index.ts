@@ -29,6 +29,8 @@ export class ModelDrivenGrid implements ComponentFramework.StandardControl<IInpu
 
 	setSelectedRecords = (ids: string[]): void => {
 		this.context.parameters.records.setSelectedRecordIds(ids);
+		// Trigger a UI update to reflect the selection change
+		this.notifyOutputChanged();
 	};
 
 	onNavigate = (item?: ComponentFramework.PropertyHelper.DataSetApi.EntityRecord): void => {
@@ -85,6 +87,112 @@ export class ModelDrivenGrid implements ComponentFramework.StandardControl<IInpu
 		this.context.mode.setFullScreen(true);
 	};
 
+	private setupMcpTools(): void {
+		server.tool("getPageInfo", "Get current page info", {}, async () => {
+			return {
+				content: [
+					{
+						type: "text",
+						text: JSON.stringify({
+							title: document.title,
+							url: window.location.href,
+						}),
+					},
+				],
+			};
+		});
+
+		server.tool("getGridData", "Get current grid data and state", {}, async () => {
+			return {
+				content: [
+					{
+						type: "text",
+						text: JSON.stringify({
+							totalRecords: this.context.parameters.records.paging.totalResultCount,
+							currentPage: this.currentPage,
+							selectedRecords: this.context.parameters.records.getSelectedRecordIds(),
+							hasNextPage: this.context.parameters.records.paging.hasNextPage,
+							hasPreviousPage: this.context.parameters.records.paging.hasPreviousPage,
+							isLoading: this.context.parameters.records.loading,
+							columns: this.context.parameters.records.columns.map(col => ({
+								name: col.name,
+								displayName: col.displayName,
+								dataType: col.dataType,
+								order: col.order,
+								isHidden: col.isHidden
+							})),
+							sorting: this.context.parameters.records.sorting,
+							filtering: this.context.parameters.records.filtering?.getFilter()
+						})
+					}
+				]
+			};
+		});
+
+		server.tool("sortGrid", "Sorts the grid on a column", {
+			columnName: z.string().describe("The logical name of the column that we should sort on"),
+			direction: z.string().describe("The sorting direction - 'true' if descending, 'false' if ascending")
+		}, async ({ columnName, direction }) => {
+			this.onSort(columnName, direction === "true");
+			return {
+				content: [
+					{
+						type: "text",
+						text: `Grid sorted by ${columnName} in ${direction === "true" ? "descending" : "ascending"} order.`,
+					},
+				],
+			};
+		});
+
+		server.tool("selectRecordsBySearch", "Search through dataset rows and select records that match a search string", {
+			searchString: z.string().describe("The string to search for across all visible columns"),
+			caseSensitive: z.boolean().optional().describe("Whether the search should be case sensitive (default: false)")
+		}, async ({ searchString, caseSensitive = false }) => {
+			const matchingRecordIds: string[] = [];
+			const searchTerm = caseSensitive ? searchString : searchString.toLowerCase();
+			
+			// Get all visible columns for searching
+			const visibleColumns = this.context.parameters.records.columns
+				.filter(col => !col.isHidden);
+			
+			// Search through all records
+			this.sortedRecordsIds.forEach(recordId => {
+				const record = this.records[recordId];
+				if (record) {
+					// Check each visible column for the search term
+					const isMatch = visibleColumns.some(column => {
+						try {
+							const value = record.getFormattedValue(column.name);
+							if (value) {
+								const searchValue = caseSensitive ? value : value.toLowerCase();
+								return searchValue.includes(searchTerm);
+							}
+						} catch {
+							// Skip columns that can't be read
+						}
+						return false;
+					});
+					
+					if (isMatch) {
+						matchingRecordIds.push(recordId);
+					}
+				}
+			});
+			
+			// Select the matching records
+			this.setSelectedRecords(matchingRecordIds);
+			
+			return {
+				content: [
+					{
+						type: "text",
+						text: `Found and selected ${matchingRecordIds.length} records matching "${searchString}". Record IDs: ${matchingRecordIds.join(', ')}`,
+					},
+				],
+			};
+		});	
+	}
+
 	/**
 	 * Used to initialize the control instance. Controls can kick off remote server calls and other initialization actions here.
 	 * Data-set values are not initialized here, use updateView.
@@ -106,55 +214,7 @@ export class ModelDrivenGrid implements ComponentFramework.StandardControl<IInpu
 		this.resources = this.context.resources;
 		this.isTestHarness = document.getElementById("control-dimensions") !== null;
 
-		// Expose a tool (wrap your app's logic)
-		server.tool("getPageInfo", "Get current page info", {}, async () => {
-			return {
-				content: [
-					{
-						type: "text",
-						text: JSON.stringify({
-							title: document.title,
-							url: window.location.href,
-						}),
-					},
-				],
-			};
-		});
-
-		server.tool("sortGrid", "Sorts the grid on a column", {
-			columnName: z.string().describe("The logical name of the column that we should sort on."), direction: z.string().describe("The sorting direction - 'true' if descending.")
-		}, async ({ columnName, direction }) => {
-
-			this.onSort(columnName, direction == "true");
-
-			return {
-				content: [
-					{
-						type: "text",
-						text: "Sorting completed.",
-					},
-				],
-			};
-		});
-
-		server.tool("addColumn", "Adds a column to the dataset. ", { columnName: z.string().describe("The name of the column to be added.")}, async ({ columnName }) => {
-			
-			if (this.context.parameters.records.addColumn) {
-				this.context.parameters.records.addColumn(columnName);
-			}
-
-			return {
-
-				content: [
-					{
-						type: "text",
-						text: "Column was added",
-					},
-				],
-			};
-		});
-
-
+		this.setupMcpTools();
 		await server.connect(new TabServerTransport({ allowedOrigins: ["*"] })); // Adjust origins for security
 	}
 
@@ -203,6 +263,7 @@ export class ModelDrivenGrid implements ComponentFramework.StandardControl<IInpu
 				columns: dataset.columns,
 				records: this.records,
 				sortedRecordIds: this.sortedRecordsIds,
+				selectedRecordIds: dataset.getSelectedRecordIds(),
 				hasNextPage: paging.hasNextPage,
 				hasPreviousPage: paging.hasPreviousPage,
 				currentPage: this.currentPage,
