@@ -70,7 +70,7 @@ Follow the instructions [here](https://learn.microsoft.com/en-us/power-apps/deve
 ### Connect your MCP enabled LLM to MCP-B
 In order to connect your LLM to the MCP-B native bridge, an MCP Client is needed:
 
-- **Visual Studio Code ** is easy to setup, just add a `http` MCP Server and enter the URL `http://127.0.0.1:12306/mcp`.
+- **Visual Studio Code** is easy to setup, just add a `http` MCP Server and enter the URL `http://127.0.0.1:12306/mcp`.
 - **LM Studio** is also easy to setup, just add the following to the `mcp.json`file:
 
 ```json
